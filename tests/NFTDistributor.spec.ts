@@ -4,7 +4,7 @@ import { PayoutCollection, Errors, Op, Distribution } from '../wrappers/PayoutNF
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
+import { compile } from '@ton/blueprint';
 import { randomAddress } from '@ton-community/test-utils';
 import { getRandomInt, getRandomTon, computedGeneric } from '../utils'
 

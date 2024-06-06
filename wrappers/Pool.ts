@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue, Message, storeMessage } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue, Message, storeMessage } from '@ton/core';
 
 import { PayoutCollection } from "./PayoutNFTCollection";
 import { Conf, Op, PoolState } from "../PoolConstants";
@@ -59,6 +59,7 @@ export type PoolFullConfig = {
   controller_code: Cell;
   pool_jetton_wallet_code: Cell;
   payout_minter_code: Cell;
+  vote_keeper_code: Cell;
 };
 
 export type PoolData = Awaited<ReturnType<InstanceType<typeof Pool>['getFullData']>>;
@@ -157,7 +158,8 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
     approver: data.approver,
     controller_code: data.controllerCode,
     pool_jetton_wallet_code: data.jettonWalletCode,
-    payout_minter_code: data.payoutMinterCode
+    payout_minter_code: data.payoutMinterCode,
+    vote_keeper_code: data.voteKeeperCode
   };
 }
 
@@ -614,6 +616,7 @@ export class Pool implements Contract {
 
         let projectedTotalBalance = stack.readBigNumber();
         let projectedPoolSupply = stack.readBigNumber();
+        let voteKeeperCode = stack.readCell();
 
         return {
             state, halted,
@@ -641,6 +644,7 @@ export class Pool implements Contract {
             payoutMinterCode,
             projectedTotalBalance,
             projectedPoolSupply,
+            voteKeeperCode
         };
     }
 

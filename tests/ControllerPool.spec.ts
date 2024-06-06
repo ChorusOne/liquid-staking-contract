@@ -7,7 +7,7 @@ import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
-import { compile } from '@ton-community/blueprint';
+import { compile } from '@ton/blueprint';
 import { Conf, Op } from "../PoolConstants";
 import { findCommon, computedGeneric } from '../utils';
 

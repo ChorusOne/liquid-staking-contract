@@ -7,7 +7,7 @@ import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
 import { readFileSync } from 'fs';
-import { compile } from '@ton-community/blueprint';
+import { compile } from '@ton/blueprint';
 
 export function readCompiled(name: string): Cell {
     const filename = 'build/' + name + '.compiled.json';

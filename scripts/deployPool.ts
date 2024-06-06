@@ -1,46 +1,71 @@
-import { Address, Cell, toNano, beginCell } from 'ton-core';
-import { Pool, dataToFullConfig, poolFullConfigToCell } from '../wrappers/Pool';
+import { Address, Cell, toNano, beginCell } from '@ton/core';
+import { Pool, dataToFullConfig, poolFullConfigToCell, PoolFullConfig } from '../wrappers/Pool';
 import { PoolState } from "../PoolConstants";
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import { compile, NetworkProvider, sleep } from '@ton-community/blueprint';
+import { compile, NetworkProvider, sleep } from '@ton/blueprint';
 import {JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import { Controller } from '../wrappers/Controller';
 import { Librarian, LibrarianConfig } from '../wrappers/Librarian';
 
+import { mnemonicToWalletKey } from "ton-crypto";
+import { TonClient, WalletContractV4 } from "@ton/ton";
 
-const waitForTransaction = async (provider:NetworkProvider, address:Address,
-                                  action:string = "transaction",
-                                  curTxLt:string | null = null,
-                                  maxRetry:number = 15,
-                                  interval:number=1000) => {
-    let done  = false;
-    let count = 0;
-    const ui  = provider.ui();
-    let blockNum = (await provider.api().getLastBlock()).last.seqno;
-    if(curTxLt == null) {
-        let initialState = await provider.api().getAccount(blockNum, address);
-        let lt = initialState?.account?.last?.lt;
-        curTxLt = lt ? lt : null;
-    }
-    do {
-        ui.write(`Awaiting ${action} completion (${++count}/${maxRetry})`);
-        await sleep(interval);
-        let newBlockNum = (await provider.api().getLastBlock()).last.seqno;
-        if (blockNum == newBlockNum) {
-            continue;
-        }
-        blockNum = newBlockNum;
-        const curState = await provider.api().getAccount(blockNum, address);
-        if(curState?.account?.last !== null){
-            done = curState?.account?.last?.lt !== curTxLt;
-        }
-    } while(!done && count < maxRetry);
-    return done;
+
+// const waitForTransaction = async (provider:NetworkProvider, address:Address,
+//                                   action:string = "transaction",
+//                                   curTxLt:string | null = null,
+//                                   maxRetry:number = 15,
+//                                   interval:number=1000) => {
+//     let done  = false;
+//     let count = 0;
+//     const ui  = provider.ui();
+//     let blockNum = (await provider.api().getLastBlock()).last.seqno;
+//     if(curTxLt == null) {
+//         let initialState = await provider.api().getAccount(blockNum, address);
+//         let lt = initialState?.account?.last?.lt;
+//         curTxLt = lt ? lt : null;
+//     }
+//     do {
+//         ui.write(`Awaiting ${action} completion (${++count}/${maxRetry})`);
+//         await sleep(interval);
+//         let newBlockNum = (await provider.api().getLastBlock()).last.seqno;
+//         if (blockNum == newBlockNum) {
+//             continue;
+//         }
+//         blockNum = newBlockNum;
+//         const curState = await provider.api().getAccount(blockNum, address);
+//         if(curState?.account?.last !== null){
+//             done = curState?.account?.last?.lt !== curTxLt;
+//         }
+//     } while(!done && count < maxRetry);
+//     return done;
+// }
+
+async function getWalletSender() {
+  // initialize ton rpc client on testnet
+  const client = new TonClient({ endpoint: "https://b4f154c2f56b.ngrok.app/jsonRPC" });
+  // open wallet v4 (notice the correct wallet version here)
+  // your 24 secret words (replace ... with the rest of the words)
+  const mnemonic = "borrow purchase legend real clock obvious cash canoe narrow world same unaware sentence diet violin modify humble moment man insane giggle you panic sort"
+  const key = await mnemonicToWalletKey(mnemonic.split(" "));
+  const wallet = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0, walletId: 42 });
+  console.log("workchain:", wallet.address.workChain)
+  console.log("address:", wallet.address.hash.toString("hex").toUpperCase())
+  console.log("balance: ", await client.getBalance(wallet.address))
+  if (!await client.isContractDeployed(wallet.address)) {
+      console.log("wallet is not deployed");
+  }
+   // open wallet and read the current seqno of the wallet
+  const walletContract = client.open(wallet);
+  const walletSender = walletContract.sender(key.secretKey);
+
+  return walletSender
 }
 
 export async function run(provider: NetworkProvider) {
 
-    const sender   = provider.sender();
+    // const sender   = provider.sender();
+    const sender = await getWalletSender();
     const admin:Address = sender.address!;
 
     const librarian_code = await compile('Librarian');
@@ -62,9 +87,10 @@ export async function run(provider: NetworkProvider) {
     const minter  = DAOJettonMinter.createFromConfig({
                                                   admin,
                                                   content,
-                                                  voting_code:dao_voting_code},
+                                                  voting_code:dao_voting_code
+                                                },
                                                   dao_minter_code);
-    let poolFullConfig = {
+    let poolFullConfig : PoolFullConfig =  {
           state: PoolState.NORMAL as (0 | 1),
           halted: false, // not halted
           totalBalance: 0n,
@@ -118,72 +144,86 @@ export async function run(provider: NetworkProvider) {
     //console.log("Librarian address:", librarian.address);
     //await librarian.sendDeploy(provider.sender(), toNano("1"));
     //await waitForTransaction(provider, librarian.address, "Librarian deploy");
+
+    
     const librarian = provider.open(Librarian.createFromAddress(Address.parse("Ef9ymVquxBIMq3rheG_AzE4WQ7bUGQptF151_yJoEwVyJPZi")));
-    await librarian.sendAddLibrary(provider.sender(), dao_wallet_code_raw);
-    await waitForTransaction(provider, librarian.address, "dao_wallet_code_raw registering");
+
+
+
+    console.log("Deploying library");
+    await librarian.sendAddLibrary(sender, dao_wallet_code_raw);
+    await librarian.sendDeploy(sender, toNano("0.1"));
+    // await provider.waitForDeploy(librarian.address);
+
+
+    // // await waitForTransaction(provider, librarian.address, "dao_wallet_code_raw registering");
 
     const pool = provider.open(Pool.createFromFullConfig(poolFullConfig, pool_code));
 
-    // Deployment scheme:
-    // 1. Deploy DAO Minter with wallet as admin
-    // 2. Deploy Pool with DAO Minter as main jetton minter (all other roles set to wallet)
-    // 3. Transfer adminship of DAO Minter to Pool
+    // // Deployment scheme:
+    // // 1. Deploy DAO Minter with wallet as admin
+    // // 2. Deploy Pool with DAO Minter as main jetton minter (all other roles set to wallet)
+    // // 3. Transfer adminship of DAO Minter to Pool
 
+    console.log("Deploying minter");
     const poolJetton = provider.open(minter);
-    await poolJetton.sendDeploy(provider.sender(), toNano("0.1"));
+    await poolJetton.sendDeploy(sender, toNano("0.1"));
     await provider.waitForDeploy(poolJetton.address);
-    await pool.sendDeploy(provider.sender(), toNano("11"));
+
+    console.log("Deploying pool");
+    await pool.sendDeploy(sender, toNano("11"));
     await provider.waitForDeploy(pool.address);
-    await poolJetton.sendChangeAdmin(provider.sender(), pool.address);
-    await waitForTransaction(provider, poolJetton.address, "transfer adminship of DAO Minter to Pool");
+    await poolJetton.sendChangeAdmin(sender, pool.address);
 
-    // Pool can start in pessimistic mode an switch during the round
-    /*await pool.sendDeposit(provider.sender(), toNano("2"));
-    await waitForTransaction(provider, pool.address, "pessimistic deposit");
-    await pool.sendDeposit(provider.sender(), toNano("3"));
-    await waitForTransaction(provider, pool.address, "pessimistic deposit 2");
-    */
-    await pool.sendSetDepositSettings(provider.sender(), toNano("1"), true, true);
-    await waitForTransaction(provider, pool.address, "set optimistic deposit settings");
+    // await waitForTransaction(provider, poolJetton.address, "transfer adminship of DAO Minter to Pool");
 
-    await pool.sendDeposit(provider.sender(), toNano("100"));
-    await waitForTransaction(provider, pool.address, "optimistic deposit");
-    await pool.sendDonate(provider.sender(), toNano("1")); //compensate round finalize fee
-    await waitForTransaction(provider, pool.address, "donation");
-    await pool.sendDeposit(provider.sender(), toNano("100"));
-    await waitForTransaction(provider, pool.address, "optimistic deposit 2");
+    // // Pool can start in pessimistic mode an switch during the round
+    // /*await pool.sendDeposit(provider.sender(), toNano("2"));
+    // await waitForTransaction(provider, pool.address, "pessimistic deposit");
+    // await pool.sendDeposit(provider.sender(), toNano("3"));
+    // await waitForTransaction(provider, pool.address, "pessimistic deposit 2");
+    // */
+    // await pool.sendSetDepositSettings(provider.sender(), toNano("1"), true, true);
+    // // await waitForTransaction(provider, pool.address, "set optimistic deposit settings");
 
-    // For manual pool rotation
-    //await pool.sendTouch(provider.sender());
+    // await pool.sendDeposit(provider.sender(), toNano("100"));
+    // // await waitForTransaction(provider, pool.address, "optimistic deposit");
+    // await pool.sendDonate(provider.sender(), toNano("1")); //compensate round finalize fee
+    // // await waitForTransaction(provider, pool.address, "donation");
+    // await pool.sendDeposit(provider.sender(), toNano("100"));
+    // // await waitForTransaction(provider, pool.address, "optimistic deposit 2");
 
-    // For manual controller managing
-    //let controller = provider.open(Controller.createFromAddress(Address.parse(" ==INSERT HERE== ")));
-    //await controller.sendUpdateHash(provider.sender());
-    //await controller.sendApprove(provider.sender());
-    //await controller.sendTopUp(provider.sender(), toNano('10000'));
+    // // For manual pool rotation
+    // //await pool.sendTouch(provider.sender());
 
-    // For governor
-    //await pool.sendSetRoles(provider.sender(), null, Address.parse(" ==INSERT HERE== "), null)
-    //await pool.sendSetInterest(provider.sender(), 0.0005);
+    // // For manual controller managing
+    // //let controller = provider.open(Controller.createFromAddress(Address.parse(" ==INSERT HERE== ")));
+    // //await controller.sendUpdateHash(provider.sender());
+    // //await controller.sendApprove(provider.sender());
+    // //await controller.sendTopUp(provider.sender(), toNano('10000'));
 
-    // For user
-    //let userWallet = provider.open(PoolJettonWallet.createFromAddress(Address.parse(" ==INSERT HERE== ")));
-    //await userWallet.sendBurnWithParams(provider.sender(), toNano("1.0"), toNano("100000"), sender.address!, false, false);
-    //await new Promise(f => setTimeout(f, 10000));
-    //await userWallet.sendTransfer(provider.sender(), toNano("1.0"), toNano("2"), Address.parse(" ==INSERT HERE== "), sender.address!, null, toNano("0.8"), null);
+    // // For governor
+    // //await pool.sendSetRoles(provider.sender(), null, Address.parse(" ==INSERT HERE== "), null)
+    // //await pool.sendSetInterest(provider.sender(), 0.0005);
 
-    // For sudoer
-    /*
-    // How to "safely" update pool data:
-    // It is expedient to halt before and unhalt after
-    let fullData = await pool.getFullDataRaw();
-    let newPoolConfig = dataToFullConfig(fullData);
-    //update data here
-    newPoolConfig.controller_code = controller_code;
-    newPoolConfig.payout_minter_code = payout_collection;
-    let storage = poolFullConfigToCell(newPoolConfig);
-    await pool.sendUpgrade(provider.sender(), storage, pool_code, null);
-    */
+    // // For user
+    // //let userWallet = provider.open(PoolJettonWallet.createFromAddress(Address.parse(" ==INSERT HERE== ")));
+    // //await userWallet.sendBurnWithParams(provider.sender(), toNano("1.0"), toNano("100000"), sender.address!, false, false);
+    // //await new Promise(f => setTimeout(f, 10000));
+    // //await userWallet.sendTransfer(provider.sender(), toNano("1.0"), toNano("2"), Address.parse(" ==INSERT HERE== "), sender.address!, null, toNano("0.8"), null);
+
+    // // For sudoer
+    // /*
+    // // How to "safely" update pool data:
+    // // It is expedient to halt before and unhalt after
+    // let fullData = await pool.getFullDataRaw();
+    // let newPoolConfig = dataToFullConfig(fullData);
+    // //update data here
+    // newPoolConfig.controller_code = controller_code;
+    // newPoolConfig.payout_minter_code = payout_collection;
+    // let storage = poolFullConfigToCell(newPoolConfig);
+    // await pool.sendUpgrade(provider.sender(), storage, pool_code, null);
+    // */
 
 
 

@@ -1,6 +1,6 @@
 import { Blockchain,BlockchainSnapshot, BlockchainTransaction, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton-community/sandbox";
 import { Address, Cell, beginCell, toNano, Sender, Dictionary } from 'ton-core';
-import { compile } from '@ton-community/blueprint';
+import { compile } from '@ton/blueprint';
 import '@ton-community/test-utils';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';

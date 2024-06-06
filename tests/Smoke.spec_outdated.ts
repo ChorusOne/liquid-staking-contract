@@ -8,7 +8,7 @@ import { JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappe
 import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
+import { compile } from '@ton/blueprint';
 import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
